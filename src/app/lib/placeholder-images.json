@@ -1,0 +1,41 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "mango-logo",
+      "description": "Mango fruit with a leaf",
+      "imageUrl": "https://picsum.photos/seed/mango/400/400",
+      "imageHint": "mango fruit"
+    },
+    {
+      "id": "profile-1",
+      "description": "Young woman in Dakar",
+      "imageUrl": "https://picsum.photos/seed/dakar1/600/800",
+      "imageHint": "african woman smiling"
+    },
+    {
+      "id": "profile-2",
+      "description": "Young man in Saint-Louis",
+      "imageUrl": "https://picsum.photos/seed/sl1/600/800",
+      "imageHint": "african man portrait"
+    },
+    {
+      "id": "profile-3",
+      "description": "Woman enjoying nature",
+      "imageUrl": "https://picsum.photos/seed/nature1/600/800",
+      "imageHint": "woman outdoors africa"
+    },
+    {
+      "id": "profile-4",
+      "description": "Professional man in city",
+      "imageUrl": "https://picsum.photos/seed/city1/600/800",
+      "imageHint": "man wearing glasses"
+    },
+    {
+      "id": "match-celebration",
+      "description": "Two happy people matching",
+      "imageUrl": "https://picsum.photos/seed/match1/800/600",
+      "imageHint": "happy couple african"
+    }
+  ]
+}
