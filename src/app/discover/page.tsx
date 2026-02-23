@@ -1,23 +1,35 @@
-
 import { BottomNav } from '@/components/bottom-nav';
 import { DiscoveryFeed } from '@/components/discovery-feed';
-import { MangoIcon } from '@/components/mango-icons';
-import { Settings2 } from 'lucide-react';
 
 export default function DiscoverPage() {
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <header className="px-6 pt-8 pb-4 flex justify-between items-center bg-background/50 backdrop-blur-md sticky top-0 z-40">
-        <div className="flex items-center gap-2">
-          <MangoIcon className="h-8 w-8" />
-          <h1 className="text-2xl font-headline italic text-primary">Découvrir</h1>
-        </div>
-        <button className="p-2 bg-white/5 rounded-full border border-white/10 text-white/60 hover:text-white transition-colors">
-          <Settings2 className="h-5 w-5" />
+    <div className="min-h-screen flex flex-col" style={{ background: '#0D0D0D' }}>
+      {/* Header */}
+      <header
+        className="px-6 flex items-center justify-between shrink-0"
+        style={{ paddingTop: 58, paddingBottom: 16 }}
+      >
+        <h1
+          className="font-headline font-black text-white"
+          style={{ fontSize: 28, letterSpacing: -0.5 }}
+        >
+          Décou<em className="italic" style={{ color: '#FFB300' }}>vrir</em>
+        </h1>
+        <button
+          className="flex items-center justify-center"
+          style={{
+            width: 44, height: 44, borderRadius: 14,
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="12" y1="18" x2="20" y2="18"/>
+          </svg>
         </button>
       </header>
 
-      <main className="px-4 max-w-md mx-auto">
+      <main className="flex-1 flex flex-col px-5 pb-28 min-h-0">
         <DiscoveryFeed />
       </main>
 

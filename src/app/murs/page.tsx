@@ -1,54 +1,138 @@
+"use client";
 
+import { useEffect, useState } from 'react';
 import { BottomNav } from '@/components/bottom-nav';
+import { useRequireAuth } from '@/hooks/use-require-auth';
+import { listenToInboundLikes, listenToMatches } from '@/lib/firestore';
+import type { InboundLike, Match } from '@/lib/types';
 import { MangoIcon } from '@/components/mango-icons';
-import Image from 'next/image';
-import Link from 'next/link';
 
-const MOCK_MURS = [
-  { id: '1', name: 'Awa', photo: 'https://picsum.photos/seed/dakar1/200/200', new: true },
-  { id: '2', name: 'Fatou', photo: 'https://picsum.photos/seed/nature1/200/200', new: false },
-  { id: '4', name: 'Yasmine', photo: 'https://picsum.photos/seed/city1/200/200', new: false },
-];
+export default function LikesPage() {
+  const { user, loading } = useRequireAuth();
+  const [likes, setLikes] = useState<InboundLike[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
 
-export default function MursPage() {
+  useEffect(() => {
+    if (!user) return;
+    const unsubLikes = listenToInboundLikes(user.uid, setLikes);
+    const unsubMatches = listenToMatches(user.uid, setMatches);
+    return () => { unsubLikes(); unsubMatches(); };
+  }, [user]);
+
+  // Filter out people we already matched with (they're in Messages)
+  const matchedUids = new Set(
+    matches.flatMap(m => m.users.filter(uid => uid !== user?.uid))
+  );
+  const unmatched = likes.filter(l => !matchedUids.has(l.fromUid));
+  const count = unmatched.length;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0D0D0D' }}>
+        <MangoIcon className="w-10 h-10 animate-pulse" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <header className="px-6 pt-8 pb-4 flex items-center gap-2 bg-background/50 backdrop-blur-md sticky top-0 z-40">
-        <MangoIcon className="h-8 w-8" />
-        <h1 className="text-2xl font-headline italic text-primary">Mûrs</h1>
+    <div className="min-h-screen flex flex-col pb-24" style={{ background: '#0D0D0D' }}>
+      <header className="flex items-center px-6" style={{ paddingTop: 58, paddingBottom: 16 }}>
+        <h1 className="font-headline font-black text-white" style={{ fontSize: 28, letterSpacing: -0.5 }}>
+          Likes <em className="not-italic" style={{ color: '#FFB300' }}>🥭</em>
+        </h1>
+        {count > 0 && (
+          <span
+            className="ml-3 px-2.5 py-1 text-xs font-bold"
+            style={{ borderRadius: 20, background: 'rgba(255,179,0,0.15)', color: '#FFB300', border: '1px solid rgba(255,179,0,0.25)' }}
+          >
+            {count}
+          </span>
+        )}
       </header>
 
-      <main className="px-6 py-6">
-        <div className="mb-8">
-          <h2 className="text-sm font-bold uppercase tracking-widest text-white/40 mb-4">Nouveaux Matchs</h2>
-          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-            {MOCK_MURS.filter(m => m.new).map(mur => (
-              <Link key={mur.id} href={`/jus/${mur.id}`} className="flex flex-col items-center gap-2 shrink-0">
-                <div className="relative h-20 w-20 rounded-full p-1 border-2 border-primary">
-                  <div className="relative h-full w-full rounded-full overflow-hidden">
-                    <Image src={mur.photo} alt={mur.name} fill className="object-cover" />
+      <main className="px-6 flex flex-col gap-6">
+        {count === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+            <MangoIcon className="w-14 h-14 opacity-30" />
+            <p className="text-lg font-headline italic text-white">Personne n'a encore liké…</p>
+            <p className="text-sm font-light" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              Continue à swiper, ça arrive vite !
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Premium CTA */}
+            <div
+              className="flex flex-col items-center gap-3 p-5 text-center"
+              style={{ borderRadius: 24, background: 'rgba(255,179,0,0.08)', border: '1px solid rgba(255,179,0,0.2)' }}
+            >
+              <div className="flex items-center justify-center w-12 h-12" style={{ borderRadius: '50%', background: 'rgba(255,179,0,0.15)' }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFB300" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </div>
+              <p className="font-bold text-white" style={{ fontSize: 16 }}>
+                {count} {count === 1 ? 'personne a liké' : 'personnes ont liké'} ton profil
+              </p>
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Passe Premium pour voir qui t'a aimé et matcher instantanément.
+              </p>
+              <button
+                className="w-full py-3 font-bold text-sm"
+                style={{ borderRadius: 16, background: 'linear-gradient(135deg, #FFB300, #FF7A00)', color: '#0D0D0D', letterSpacing: 0.3 }}
+              >
+                Passer Premium — 9,99€ / mois
+              </button>
+            </div>
+
+            {/* Blurred photo grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {unmatched.map((like) => (
+                <div
+                  key={like.fromUid}
+                  className="relative overflow-hidden"
+                  style={{ borderRadius: 20, aspectRatio: '3/4', background: '#1a1a1a' }}
+                >
+                  {/* Blurred photo */}
+                  {like.photoURL ? (
+                    <img
+                      src={like.photoURL}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      style={{ filter: 'blur(18px)', transform: 'scale(1.15)' }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-4xl" style={{ filter: 'blur(8px)' }}>
+                      🌟
+                    </div>
+                  )}
+                  {/* Dark overlay */}
+                  <div className="absolute inset-0" style={{ background: 'rgba(13,13,13,0.4)' }} />
+                  {/* Lock icon */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                    <div
+                      className="flex items-center justify-center w-10 h-10"
+                      style={{ borderRadius: '50%', background: 'rgba(255,179,0,0.9)' }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0D0D0D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      </svg>
+                    </div>
+                    {/* Blurred name */}
+                    <span
+                      className="text-white font-semibold text-sm"
+                      style={{ filter: 'blur(6px)', userSelect: 'none' }}
+                    >
+                      {like.displayName}
+                    </span>
                   </div>
                 </div>
-                <span className="text-sm font-medium">{mur.name}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-widest text-white/40 mb-4">Tous les Mûrs</h2>
-          <div className="grid grid-cols-3 gap-4">
-            {MOCK_MURS.map(mur => (
-              <Link key={mur.id} href={`/jus/${mur.id}`} className="flex flex-col items-center gap-2">
-                <div className="relative w-full aspect-square rounded-mango-card overflow-hidden">
-                  <Image src={mur.photo} alt={mur.name} fill className="object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  <span className="absolute bottom-2 left-2 text-xs font-bold">{mur.name}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
+              ))}
+            </div>
+          </>
+        )}
       </main>
 
       <BottomNav />

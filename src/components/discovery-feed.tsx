@@ -1,111 +1,170 @@
-
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ProfileCard } from './profile-card';
 import { MatchOverlay } from './match-overlay';
-import { Button } from './ui/button';
-import { X, Heart, Star, RefreshCcw } from 'lucide-react';
-
-const MOCK_PROFILES = [
-  {
-    id: '1',
-    name: 'Awa',
-    age: 24,
-    city: 'Dakar',
-    distance: '3 km',
-    bio: 'Passionnée de cuisine et de voyages. Je cherche quelqu\'un pour partager de bons moments.',
-    interests: ['Cuisine', 'Plage', 'Musique'],
-    photo: 'https://picsum.photos/seed/dakar1/600/800',
-  },
-  {
-    id: '2',
-    name: 'Moussa',
-    age: 28,
-    city: 'Saint-Louis',
-    distance: '12 km',
-    bio: 'Artiste dans l\'âme. J\'aime le jazz et les couchers de soleil sur le fleuve.',
-    interests: ['Art', 'Jazz', 'Photographie'],
-    photo: 'https://picsum.photos/seed/sl1/600/800',
-  },
-  {
-    id: '3',
-    name: 'Fatou',
-    age: 26,
-    city: 'Thiès',
-    distance: '5 km',
-    bio: 'Entrepreneur, dynamique et souriante. La vie est une mangue sucrée!',
-    interests: ['Entreprenariat', 'Sourire', 'Voyage'],
-    photo: 'https://picsum.photos/seed/nature1/600/800',
-  }
-];
+import { MangoIcon } from './mango-icons';
+import { useRequireAuth } from '@/hooks/use-require-auth';
+import { getDiscoveryProfiles, recordSwipe } from '@/lib/firestore';
+import type { UserProfile, Match } from '@/lib/types';
 
 export function DiscoveryFeed() {
+  const { user, profile, loading: authLoading } = useRequireAuth();
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [showMatch, setShowMatch] = useState(false);
+  const [loadingProfiles, setLoadingProfiles] = useState(true);
+  const [swipeDir, setSwipeDir] = useState<'left' | 'right' | null>(null);
+  const [newMatch, setNewMatch] = useState<Match | null>(null);
 
-  const handleSwipe = (direction: 'left' | 'right') => {
-    if (direction === 'right' && currentIndex === 0) {
-      // Trigger match for the first one for demo
-      setShowMatch(true);
-    } else {
-      setCurrentIndex(prev => Math.min(prev + 1, MOCK_PROFILES.length));
-    }
+  useEffect(() => {
+    if (!user || authLoading || !profile) return;
+    getDiscoveryProfiles(user.uid, profile)
+      .then(setProfiles)
+      .finally(() => setLoadingProfiles(false));
+  }, [user, profile, authLoading]);
+
+  const handleSwipe = async (direction: 'left' | 'right') => {
+    if (swipeDir || !user || !profile) return;
+    const target = profiles[currentIndex];
+    if (!target) return;
+
+    setSwipeDir(direction);
+
+    setTimeout(async () => {
+      setSwipeDir(null);
+
+      const match = await recordSwipe(
+        user.uid,
+        target.uid,
+        direction === 'right' ? 'liked' : 'passed',
+        { displayName: profile.displayName, photoURL: profile.photoURL },
+        { displayName: target.displayName, photoURL: target.photoURL }
+      );
+
+      if (match) {
+        setNewMatch(match);
+      } else {
+        setCurrentIndex(prev => prev + 1);
+      }
+    }, 380);
   };
 
-  const resetMatch = () => {
-    setShowMatch(false);
-    setCurrentIndex(prev => Math.min(prev + 1, MOCK_PROFILES.length));
+  const dismissMatch = () => {
+    setNewMatch(null);
+    setCurrentIndex(prev => prev + 1);
   };
 
-  if (currentIndex >= MOCK_PROFILES.length) {
+  if (authLoading || loadingProfiles) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-center">
-        <div className="bg-white/5 p-8 rounded-full mb-6">
-          <RefreshCcw className="h-12 w-12 text-primary" />
-        </div>
-        <h2 className="text-2xl font-headline italic mb-2">Plus rien n&apos;est mûr...</h2>
-        <p className="text-muted-foreground mb-8">Revenez plus tard pour de nouvelles découvertes.</p>
-        <Button 
-          onClick={() => setCurrentIndex(0)} 
-          variant="outline" 
-          className="rounded-mango-btn border-primary/50 text-primary hover:bg-primary/10"
-        >
-          Recommencer
-        </Button>
+      <div className="flex flex-col items-center justify-center flex-1 gap-4">
+        <MangoIcon className="w-14 h-14 animate-pulse" />
+        <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>Chargement…</p>
       </div>
     );
   }
 
-  const currentProfile = MOCK_PROFILES[currentIndex];
+  if (currentIndex >= profiles.length) {
+    return (
+      <div className="flex flex-col items-center justify-center flex-1 text-center gap-6">
+        <div
+          className="flex flex-col items-center gap-4 p-8 rounded-[28px]"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <MangoIcon className="w-16 h-16 opacity-40" />
+          <h2 className="font-headline font-bold text-white text-2xl italic">Plus rien n&apos;est mûr…</h2>
+          <p className="text-sm font-light" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            Revenez plus tard pour de nouvelles découvertes.
+          </p>
+          <button
+            onClick={() => setCurrentIndex(0)}
+            className="mt-2 px-6 py-3 rounded-[20px] font-semibold text-sm text-white"
+            style={{ background: 'linear-gradient(135deg, #FFB300, #FF7A00)' }}
+          >
+            Recommencer
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const currentProfile = profiles[currentIndex];
+  const nextProfile = profiles[currentIndex + 1];
 
   return (
-    <div className="relative h-[calc(100vh-180px)] w-full flex flex-col items-center">
-      {showMatch && <MatchOverlay profile={currentProfile} onClose={resetMatch} />}
-      
-      <div className="flex-1 w-full relative">
-        <ProfileCard profile={currentProfile} />
+    <div className="flex flex-col flex-1 min-h-0">
+      {newMatch && (
+        <MatchOverlay
+          match={newMatch}
+          myProfile={profile!}
+          onClose={dismissMatch}
+        />
+      )}
+
+      {/* Card stack */}
+      <div className="relative flex-1" style={{ minHeight: 420 }}>
+        {nextProfile && (
+          <div
+            className="absolute inset-0 overflow-hidden rounded-[28px]"
+            style={{ transform: 'scale(0.95) translateY(20px)', transformOrigin: 'bottom center', zIndex: 0 }}
+          >
+            <ProfileCard profile={nextProfile} />
+          </div>
+        )}
+
+        <div
+          className="absolute inset-0 overflow-hidden rounded-[28px]"
+          style={{
+            zIndex: 1,
+            transition: 'transform 0.38s cubic-bezier(0.25,0.46,0.45,0.94), opacity 0.38s',
+            transform: swipeDir === 'right'
+              ? 'translateX(500px) rotate(20deg)'
+              : swipeDir === 'left'
+              ? 'translateX(-500px) rotate(-20deg)'
+              : 'none',
+            opacity: swipeDir ? 0 : 1,
+          }}
+        >
+          {swipeDir === 'right' && (
+            <div
+              className="absolute z-10 font-black tracking-widest"
+              style={{ top: 40, left: 20, padding: '8px 18px', borderRadius: 12, border: '3px solid #FFB300', color: '#FFB300', fontSize: 22, transform: 'rotate(-10deg)' }}
+            >
+              MÛR
+            </div>
+          )}
+          {swipeDir === 'left' && (
+            <div
+              className="absolute z-10 font-black tracking-widest"
+              style={{ top: 40, right: 20, padding: '8px 18px', borderRadius: 12, border: '3px solid #FF4444', color: '#FF4444', fontSize: 22, transform: 'rotate(10deg)' }}
+            >
+              NON
+            </div>
+          )}
+          <ProfileCard profile={currentProfile} />
+        </div>
       </div>
 
-      <div className="flex justify-center items-center gap-6 mt-6 mb-4">
-        <button 
+      {/* Action buttons */}
+      <div className="flex items-center justify-center gap-4 py-5">
+        <button
           onClick={() => handleSwipe('left')}
-          className="h-14 w-14 flex items-center justify-center bg-white/5 border border-white/10 rounded-full text-white/40 hover:text-white transition-all active:scale-95"
+          className="flex items-center justify-center transition-transform active:scale-90"
+          style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', fontSize: 24, color: 'rgba(255,255,255,0.7)' }}
         >
-          <X className="h-8 w-8" />
+          ✕
         </button>
-        
-        <button 
-          className="h-12 w-12 flex items-center justify-center bg-white/5 border border-white/10 rounded-full text-blue-400 hover:text-blue-300 transition-all active:scale-95"
+        <button
+          className="flex items-center justify-center transition-transform active:scale-90"
+          style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.2)', fontSize: 24 }}
         >
-          <Star className="h-6 w-6 fill-current" />
+          ⭐
         </button>
-
-        <button 
+        <button
           onClick={() => handleSwipe('right')}
-          className="h-14 w-14 flex items-center justify-center bg-primary/20 border border-primary/30 rounded-full text-primary hover:scale-105 transition-all active:scale-95"
+          className="flex items-center justify-center transition-transform active:scale-90"
+          style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, #FFB300, #FF6000)', boxShadow: '0 8px 30px rgba(255,120,0,0.45)', fontSize: 32 }}
         >
-          <Heart className="h-8 w-8 fill-current" />
+          🥭
         </button>
       </div>
     </div>
