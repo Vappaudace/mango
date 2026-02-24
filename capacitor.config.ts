@@ -3,7 +3,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const isLocal = process.env.CAPACITOR_ENV === 'local';
 
 const config: CapacitorConfig = {
-  appId: 'com.mango.app',
+  appId: 'sn.mango.dating',
   appName: 'Mango',
   // In production the native app loads from Firebase App Hosting (live URL).
   // During local dev with `CAPACITOR_ENV=local npx cap run ios`, it points to localhost.
