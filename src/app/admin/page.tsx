@@ -1,12 +1,45 @@
 "use client";
 
 import { useState } from 'react';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { setDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { seedAIProfiles, AI_PROFILES } from '@/lib/seed-profiles';
 import { MangoIcon } from '@/components/mango-icons';
 
 export default function AdminPage() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [log, setLog] = useState('');
+  const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [testLog, setTestLog] = useState('');
+
+  const handleCreateTestAccount = async () => {
+    setTestStatus('loading');
+    setTestLog('Création du compte test…');
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, 'test@mango.sn', 'MangoTest2026!');
+      await setDoc(doc(db, 'users', cred.user.uid), {
+        uid: cred.user.uid,
+        displayName: 'Testeur Apple',
+        age: 25,
+        city: 'Dakar',
+        gender: 'homme',
+        lookingFor: 'femme',
+        bio: 'Compte de test pour la review Apple.',
+        interests: ['Tech', 'Voyage'],
+        photoURL: 'https://i.pravatar.cc/400?img=33',
+        createdAt: serverTimestamp(),
+        lastSeen: serverTimestamp(),
+      });
+      setTestStatus('done');
+      setTestLog('✅ Compte test créé : test@mango.sn / MangoTest2026!');
+    } catch (e: unknown) {
+      setTestStatus('error');
+      const msg = e instanceof Error ? e.message : String(e);
+      setTestLog(msg.includes('email-already-in-use') ? '✅ Compte déjà existant.' : `❌ ${msg}`);
+      if (msg.includes('email-already-in-use')) setTestStatus('done');
+    }
+  };
 
   const handleSeed = async () => {
     setStatus('loading');
@@ -71,6 +104,28 @@ export default function AdminPage() {
       >
         {status === 'loading' ? '⏳ Injection…' : status === 'done' ? '✅ Profils injectés' : `🚀 Injecter ${AI_PROFILES.length} profils`}
       </button>
+
+      {/* Test account button */}
+      <button
+        onClick={handleCreateTestAccount}
+        disabled={testStatus === 'loading' || testStatus === 'done'}
+        className="w-full max-w-sm h-14 font-semibold text-white rounded-[20px] transition-all active:scale-95"
+        style={{
+          background: testStatus === 'done'
+            ? 'rgba(0,200,100,0.15)'
+            : testStatus === 'loading'
+            ? 'rgba(255,255,255,0.06)'
+            : 'rgba(255,255,255,0.08)',
+          border: testStatus === 'done' ? '1px solid rgba(0,200,100,0.3)' : '1px solid rgba(255,255,255,0.1)',
+          color: testStatus === 'done' ? 'rgb(0,200,100)' : 'white',
+        }}
+      >
+        {testStatus === 'loading' ? '⏳ Création…' : testStatus === 'done' ? testLog : '🧪 Créer compte test Apple'}
+      </button>
+
+      {testLog && testStatus === 'error' && (
+        <p className="text-center text-sm max-w-sm" style={{ color: '#FF6B6B' }}>{testLog}</p>
+      )}
 
       {log && (
         <p
