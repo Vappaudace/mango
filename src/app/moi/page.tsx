@@ -4,7 +4,8 @@ import { useState, useRef } from 'react';
 import { Geolocation } from '@capacitor/geolocation';
 import { signOut } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, storage } from '@/lib/firebase';
+import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { auth, storage, db } from '@/lib/firebase';
 import { updateUserProfile } from '@/lib/firestore';
 import { useRequireAuth } from '@/hooks/use-require-auth';
 import { BottomNav } from '@/components/bottom-nav';
@@ -14,13 +15,14 @@ import { useRouter } from 'next/navigation';
 export default function MoiPage() {
   const router = useRouter();
   const { user, profile, loading, refreshProfile } = useRequireAuth();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const mainPhotoRef = useRef<HTMLInputElement>(null);
+  const addPhotoRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [bio, setBio] = useState('');
   const [locStatus, setLocStatus] = useState<'idle' | 'loading' | 'ok' | 'denied'>('idle');
 
-  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMainPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     setUploading(true);
@@ -33,6 +35,30 @@ export default function MoiPage() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleAddPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    const currentPhotos = profile?.photos ?? [];
+    if (currentPhotos.length >= 5) return;
+    setUploading(true);
+    try {
+      const storageRef = ref(storage, `photos/${user.uid}/photo_${Date.now()}.jpg`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      await updateDoc(doc(db, 'users', user.uid), { photos: arrayUnion(url) });
+      await refreshProfile();
+    } finally {
+      setUploading(false);
+      if (addPhotoRef.current) addPhotoRef.current.value = '';
+    }
+  };
+
+  const handleRemovePhoto = async (url: string) => {
+    if (!user) return;
+    await updateDoc(doc(db, 'users', user.uid), { photos: arrayRemove(url) });
+    await refreshProfile();
   };
 
   const saveBio = async () => {
@@ -61,14 +87,18 @@ export default function MoiPage() {
 
   if (loading || !profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0D0D0D' }}>
+      <div className="flex items-center justify-center" style={{ height: '100dvh', background: '#0D0D0D' }}>
         <MangoIcon className="w-10 h-10 animate-pulse" />
       </div>
     );
   }
 
+  const extraPhotos = profile.photos ?? [];
+  const totalPhotos = 1 + extraPhotos.length;
+  const canAddMore = totalPhotos < 6;
+
   return (
-    <div className="min-h-screen flex flex-col pb-24" style={{ background: '#0D0D0D' }}>
+    <div className="flex flex-col pb-24 overflow-y-auto" style={{ minHeight: '100dvh', background: '#0D0D0D' }}>
       {/* Header */}
       <header
         className="flex items-center justify-between px-6"
@@ -79,49 +109,76 @@ export default function MoiPage() {
           onClick={handleSignOut}
           className="flex items-center justify-center"
           style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', fontSize: 18 }}
-          title="Se déconnecter"
         >
           🚪
         </button>
       </header>
 
-      <main className="px-6 flex flex-col items-center gap-8">
-        {/* Avatar */}
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative">
-            <div
-              style={{ width: 120, height: 120, borderRadius: 36, background: 'linear-gradient(135deg, #FFB300, #FF6000)', padding: 3 }}
-            >
-              <div
-                className="w-full h-full flex items-center justify-center overflow-hidden"
-                style={{ borderRadius: 34, background: '#0D0D0D', fontSize: 56 }}
-              >
-                {profile.photoURL
-                  ? <img src={profile.photoURL} alt="" className="w-full h-full object-cover" style={{ borderRadius: 32 }} />
-                  : '😊'}
-              </div>
-            </div>
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              className="absolute flex items-center justify-center"
-              style={{ bottom: -6, right: -6, width: 34, height: 34, borderRadius: '50%', background: '#FFB300', border: '3px solid #0D0D0D', fontSize: 16 }}
-            >
-              {uploading ? '…' : '📷'}
-            </button>
-          </div>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+      <main className="px-6 flex flex-col gap-8">
+        {/* Name + city */}
+        <div className="text-center">
+          <h2 className="font-headline font-bold text-white italic" style={{ fontSize: 28 }}>
+            {profile.displayName}, {profile.age}
+          </h2>
+          <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>{profile.city} 🇸🇳</p>
+        </div>
 
-          <div className="text-center">
-            <h2 className="font-headline font-bold text-white italic" style={{ fontSize: 28 }}>
-              {profile.displayName}, {profile.age}
-            </h2>
-            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>{profile.city} 🇸🇳</p>
+        {/* Photo grid */}
+        <div>
+          <p className="font-bold uppercase tracking-widest mb-3" style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+            Photos ({totalPhotos}/6)
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {/* Main photo */}
+            <div className="relative aspect-[3/4] rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+              {profile.photoURL
+                ? <img src={profile.photoURL} alt="" className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center text-4xl">😊</div>
+              }
+              <button
+                onClick={() => mainPhotoRef.current?.click()}
+                disabled={uploading}
+                className="absolute inset-0 flex items-end justify-end p-1.5"
+              >
+                <span className="flex items-center justify-center" style={{ width: 26, height: 26, borderRadius: '50%', background: '#FFB300', fontSize: 13 }}>
+                  {uploading ? '…' : '📷'}
+                </span>
+              </button>
+            </div>
+
+            {/* Extra photos */}
+            {extraPhotos.map((url) => (
+              <div key={url} className="relative aspect-[3/4] rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                <img src={url} alt="" className="w-full h-full object-cover" />
+                <button
+                  onClick={() => handleRemovePhoto(url)}
+                  className="absolute top-1.5 right-1.5 flex items-center justify-center"
+                  style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', fontSize: 12 }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+
+            {/* Add photo slot */}
+            {canAddMore && (
+              <button
+                onClick={() => addPhotoRef.current?.click()}
+                disabled={uploading}
+                className="aspect-[3/4] rounded-2xl flex flex-col items-center justify-center gap-1"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '2px dashed rgba(255,255,255,0.12)' }}
+              >
+                <span style={{ fontSize: 24, opacity: 0.5 }}>+</span>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Photo</span>
+              </button>
+            )}
           </div>
+          <input ref={mainPhotoRef} type="file" accept="image/*" className="hidden" onChange={handleMainPhotoChange} />
+          <input ref={addPhotoRef} type="file" accept="image/*" className="hidden" onChange={handleAddPhoto} />
         </div>
 
         {/* Bio */}
-        <div className="w-full">
+        <div>
           <div className="flex items-center justify-between mb-3">
             <p className="font-bold uppercase tracking-widest" style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Bio</p>
             <button
@@ -157,7 +214,7 @@ export default function MoiPage() {
 
         {/* Interests */}
         {profile.interests?.length > 0 && (
-          <div className="w-full">
+          <div>
             <p className="font-bold uppercase tracking-widest mb-3" style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Intérêts</p>
             <div className="flex flex-wrap gap-2">
               {profile.interests.map(tag => (
@@ -174,7 +231,7 @@ export default function MoiPage() {
         )}
 
         {/* Location */}
-        <div className="w-full">
+        <div>
           <p className="font-bold uppercase tracking-widest mb-3" style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Localisation</p>
           <button
             onClick={updateLocation}
@@ -196,7 +253,6 @@ export default function MoiPage() {
             </span>
           </button>
         </div>
-
       </main>
 
       <BottomNav />

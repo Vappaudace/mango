@@ -8,6 +8,7 @@ export interface UserProfile {
   bio: string;
   interests: string[];
   photoURL: string;
+  photos?: string[]; // Additional photos (max 5)
   gender: 'homme' | 'femme' | 'autre';
   lookingFor: 'homme' | 'femme' | 'tous';
   createdAt: Timestamp;

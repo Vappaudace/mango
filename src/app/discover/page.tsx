@@ -3,11 +3,14 @@ import { DiscoveryFeed } from '@/components/discovery-feed';
 
 export default function DiscoverPage() {
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#0D0D0D' }}>
+    <div
+      className="flex flex-col overflow-hidden"
+      style={{ height: '100dvh', background: '#0D0D0D' }}
+    >
       {/* Header */}
       <header
         className="px-6 flex items-center justify-between shrink-0"
-        style={{ paddingTop: 58, paddingBottom: 16 }}
+        style={{ paddingTop: 58, paddingBottom: 12 }}
       >
         <h1
           className="font-headline font-black text-white"
@@ -29,7 +32,7 @@ export default function DiscoverPage() {
         </button>
       </header>
 
-      <main className="flex-1 flex flex-col px-5 pb-28 min-h-0">
+      <main className="flex-1 flex flex-col px-4 pb-24 min-h-0">
         <DiscoveryFeed />
       </main>
 
