@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from 'react';
+import { Geolocation } from '@capacitor/geolocation';
 import { signOut } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, storage } from '@/lib/firebase';
@@ -17,6 +18,7 @@ export default function MoiPage() {
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [bio, setBio] = useState('');
+  const [locStatus, setLocStatus] = useState<'idle' | 'loading' | 'ok' | 'denied'>('idle');
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -38,6 +40,18 @@ export default function MoiPage() {
     await updateUserProfile(user.uid, { bio });
     await refreshProfile();
     setEditing(false);
+  };
+
+  const updateLocation = async () => {
+    if (!user || locStatus === 'loading') return;
+    setLocStatus('loading');
+    try {
+      const pos = await Geolocation.getCurrentPosition({ timeout: 8000 });
+      await updateUserProfile(user.uid, { lat: pos.coords.latitude, lng: pos.coords.longitude });
+      setLocStatus('ok');
+    } catch {
+      setLocStatus('denied');
+    }
   };
 
   const handleSignOut = async () => {
@@ -158,6 +172,30 @@ export default function MoiPage() {
             </div>
           </div>
         )}
+
+        {/* Location */}
+        <div className="w-full">
+          <p className="font-bold uppercase tracking-widest mb-3" style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Localisation</p>
+          <button
+            onClick={updateLocation}
+            disabled={locStatus === 'loading'}
+            className="flex items-center gap-3 w-full px-4 py-3 rounded-2xl transition-all active:scale-[0.97]"
+            style={{
+              background: locStatus === 'ok' ? 'rgba(76,217,100,0.08)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${locStatus === 'ok' ? 'rgba(76,217,100,0.2)' : 'rgba(255,255,255,0.08)'}`,
+            }}
+          >
+            <span style={{ fontSize: 18 }}>
+              {locStatus === 'loading' ? '⏳' : locStatus === 'ok' ? '✅' : locStatus === 'denied' ? '❌' : '📍'}
+            </span>
+            <span style={{ fontSize: 13, color: locStatus === 'ok' ? '#4CD964' : locStatus === 'denied' ? '#FF6B6B' : 'rgba(255,255,255,0.6)', fontWeight: 500 }}>
+              {locStatus === 'loading' && 'Détection en cours…'}
+              {locStatus === 'ok' && 'Position mise à jour'}
+              {locStatus === 'denied' && 'Autorisation refusée — vérifie tes réglages'}
+              {locStatus === 'idle' && (profile.lat ? 'Mettre à jour ma position' : 'Activer ma localisation')}
+            </span>
+          </button>
+        </div>
 
       </main>
 

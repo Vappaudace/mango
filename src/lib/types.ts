@@ -12,6 +12,10 @@ export interface UserProfile {
   lookingFor: 'homme' | 'femme' | 'tous';
   createdAt: Timestamp;
   lastSeen: Timestamp;
+  lat?: number;
+  lng?: number;
+  /** Computed at runtime only — never stored in Firestore */
+  distanceKm?: number;
 }
 
 export interface Match {

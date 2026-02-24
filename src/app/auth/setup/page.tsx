@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { Geolocation } from '@capacitor/geolocation';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import { createUserProfile } from '@/lib/firestore';
@@ -64,9 +65,25 @@ export default function SetupPage() {
   const [bio, setBio] = useState('');
   const [interests, setInterests] = useState<string[]>([]);
 
+  // Location state
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locStatus, setLocStatus] = useState<'idle' | 'loading' | 'ok' | 'denied'>('idle');
+
   // Quiz state (step 2)
   const [quizStep, setQuizStep] = useState(0); // 0-2 = questions, 3 = bio preview
   const [quizDone, setQuizDone] = useState(false);
+
+  // Auto-request location when reaching step 1
+  useEffect(() => {
+    if (step !== 1 || locStatus !== 'idle') return;
+    setLocStatus('loading');
+    Geolocation.getCurrentPosition({ timeout: 8000 })
+      .then(pos => {
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocStatus('ok');
+      })
+      .catch(() => setLocStatus('denied'));
+  }, [step, locStatus]);
 
   const totalSteps = STEPS.length + QUIZ.length; // for finer progress
   const progressPct = step < 2
@@ -124,6 +141,7 @@ export default function SetupPage() {
         photoURL,
         gender,
         lookingFor,
+        ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
       });
 
       await refreshProfile();
@@ -280,6 +298,26 @@ export default function SetupPage() {
                 })}
               </div>
             </div>
+
+            {/* Location status */}
+            {locStatus !== 'idle' && (
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-2xl"
+                style={{
+                  background: locStatus === 'ok' ? 'rgba(76,217,100,0.08)' : 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${locStatus === 'ok' ? 'rgba(76,217,100,0.2)' : 'rgba(255,255,255,0.08)'}`,
+                }}
+              >
+                <span style={{ fontSize: 13 }}>
+                  {locStatus === 'loading' ? '📍' : locStatus === 'ok' ? '✅' : '📍'}
+                </span>
+                <span style={{ fontSize: 12, color: locStatus === 'ok' ? '#4CD964' : 'rgba(255,255,255,0.35)' }}>
+                  {locStatus === 'loading' && 'Détection de ta position…'}
+                  {locStatus === 'ok' && 'Position détectée — tu apparaîtras près de toi'}
+                  {locStatus === 'denied' && 'Localisation désactivée — active-la pour apparaître en "À proximité"'}
+                </span>
+              </div>
+            )}
 
             {/* Gender */}
             <div>

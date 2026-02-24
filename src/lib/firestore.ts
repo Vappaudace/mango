@@ -18,6 +18,18 @@ import {
 import { db } from './firebase';
 import type { UserProfile, Match, Message, InboundLike } from './types';
 
+// ─── GEO HELPERS ──────────────────────────────────────────────────────────
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLng = (lng2 - lng1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ─── USERS ────────────────────────────────────────────────────────────────
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
@@ -54,17 +66,30 @@ export async function getDiscoveryProfiles(
   ]);
 
   const usersSnap = await getDocs(query(collection(db, 'users'), limit(100)));
+  const myLat = currentProfile.lat;
+  const myLng = currentProfile.lng;
+
   return usersSnap.docs
-    .map(d => d.data() as UserProfile)
+    .map(d => {
+      const u = d.data() as UserProfile;
+      if (myLat !== undefined && myLng !== undefined && u.lat !== undefined && u.lng !== undefined) {
+        u.distanceKm = Math.round(haversineKm(myLat, myLng, u.lat, u.lng));
+      }
+      return u;
+    })
     .filter(u => {
       if (swipedUids.has(u.uid)) return false;
-      // L'autre profil doit correspondre à ce que je cherche
       const iWantThem =
         currentProfile.lookingFor === 'tous' || u.gender === currentProfile.lookingFor;
-      // L'autre profil doit chercher mon genre (ou chercher tout le monde)
       const theyWantMe =
         u.lookingFor === 'tous' || u.lookingFor === currentProfile.gender;
       return iWantThem && theyWantMe;
+    })
+    .sort((a, b) => {
+      if (a.distanceKm !== undefined && b.distanceKm !== undefined) {
+        return a.distanceKm - b.distanceKm;
+      }
+      return 0;
     });
 }
 

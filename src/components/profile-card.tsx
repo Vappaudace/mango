@@ -22,7 +22,7 @@ export function ProfileCard({ profile }: { profile: UserProfile }) {
         style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 55%)' }}
       />
 
-      {/* City badge */}
+      {/* City / distance badge */}
       <div
         className="absolute top-5 left-5 px-3 py-1.5 text-[11px] font-semibold text-white"
         style={{
@@ -33,7 +33,7 @@ export function ProfileCard({ profile }: { profile: UserProfile }) {
           borderRadius: 20,
         }}
       >
-        📍 {profile.city}
+        📍 {profile.distanceKm !== undefined ? `~${profile.distanceKm} km` : profile.city}
       </div>
 
       {/* Info at bottom */}
@@ -43,6 +43,7 @@ export function ProfileCard({ profile }: { profile: UserProfile }) {
         </h2>
         <p className="text-sm mb-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
           {profile.age} ans · {profile.city}
+          {profile.distanceKm !== undefined && ` · ~${profile.distanceKm} km`}
         </p>
 
         <div className="flex flex-wrap gap-2">
