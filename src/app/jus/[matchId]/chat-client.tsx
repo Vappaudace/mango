@@ -3,7 +3,7 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { useRequireAuth } from '@/hooks/use-require-auth';
-import { listenToMessages, sendMessage, markMessagesRead } from '@/lib/firestore';
+import { listenToMessages, sendMessage, markMessagesRead, blockUser, reportUser } from '@/lib/firestore';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Message, Match } from '@/lib/types';
@@ -23,6 +23,7 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [icebreakers, setIcebreakers] = useState<string[]>([]);
   const [showIcebreakers, setShowIcebreakers] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Load match info
@@ -66,6 +67,25 @@ export default function ChatPage() {
       setIcebreakers(result);
       setShowIcebreakers(true);
     } catch { /* ignore */ }
+  };
+
+  const handleBlock = async () => {
+    if (!user || !match) return;
+    const otherUid = match.users.find(uid => uid !== user.uid) ?? '';
+    if (!otherUid) return;
+    await blockUser(user.uid, otherUid);
+    setShowMenu(false);
+    router.back();
+  };
+
+  const handleReport = async () => {
+    if (!user || !match) return;
+    const otherUid = match.users.find(uid => uid !== user.uid) ?? '';
+    if (!otherUid) return;
+    await reportUser(user.uid, otherUid, 'inappropriate_behavior');
+    await blockUser(user.uid, otherUid);
+    setShowMenu(false);
+    router.back();
   };
 
   const handleSend = async () => {
@@ -132,6 +152,26 @@ export default function ChatPage() {
         >
           <MangoIcon className="w-5 h-5" />
         </button>
+
+        <div className="relative">
+          <button
+            onClick={() => setShowMenu(v => !v)}
+            className="flex items-center justify-center"
+            style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </button>
+          {showMenu && (
+            <div style={{ position: 'absolute', top: 48, right: 0, background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, overflow: 'hidden', zIndex: 50, minWidth: 160 }}>
+              <button onClick={handleBlock} className="w-full text-left px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                🚫 Bloquer
+              </button>
+              <button onClick={handleReport} className="w-full text-left px-4 py-3 text-sm" style={{ color: '#ff4444', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                ⚠️ Signaler
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Match banner */}

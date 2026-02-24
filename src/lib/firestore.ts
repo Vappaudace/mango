@@ -45,9 +45,11 @@ export async function getDiscoveryProfiles(
   // Get already-swiped UIDs
   const likedSnap = await getDocs(collection(db, 'swipes', currentUid, 'liked'));
   const passedSnap = await getDocs(collection(db, 'swipes', currentUid, 'passed'));
+  const blockedSnap = await getDocs(collection(db, 'blocks', currentUid, 'blocked'));
   const swipedUids = new Set([
     ...likedSnap.docs.map(d => d.id),
     ...passedSnap.docs.map(d => d.id),
+    ...blockedSnap.docs.map(d => d.id),
     currentUid,
   ]);
 
@@ -184,6 +186,36 @@ export async function sendMessage(
     lastMessageAt: serverTimestamp(),
     lastMessageSenderId: senderId,
   });
+}
+
+// ─── BLOCK & REPORT ───────────────────────────────────────────────────────
+
+/** Block a user — they'll disappear from discovery and chat */
+export async function blockUser(myUid: string, targetUid: string): Promise<void> {
+  await setDoc(doc(db, 'blocks', myUid, 'blocked', targetUid), {
+    timestamp: serverTimestamp(),
+  });
+}
+
+/** Report a user for inappropriate behavior */
+export async function reportUser(
+  myUid: string,
+  targetUid: string,
+  reason: string
+): Promise<void> {
+  await addDoc(collection(db, 'reports'), {
+    reportedBy: myUid,
+    reportedUid: targetUid,
+    reason,
+    createdAt: serverTimestamp(),
+    status: 'pending',
+  });
+}
+
+/** Get list of UIDs blocked by the current user */
+export async function getBlockedUids(myUid: string): Promise<Set<string>> {
+  const snap = await getDocs(collection(db, 'blocks', myUid, 'blocked'));
+  return new Set(snap.docs.map(d => d.id));
 }
 
 /** Mark all messages from the other user as read */

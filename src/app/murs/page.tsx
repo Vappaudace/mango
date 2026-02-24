@@ -61,29 +61,16 @@ export default function LikesPage() {
           </div>
         ) : (
           <>
-            {/* Premium CTA */}
             <div
               className="flex flex-col items-center gap-3 p-5 text-center"
               style={{ borderRadius: 24, background: 'rgba(255,179,0,0.08)', border: '1px solid rgba(255,179,0,0.2)' }}
             >
-              <div className="flex items-center justify-center w-12 h-12" style={{ borderRadius: '50%', background: 'rgba(255,179,0,0.15)' }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFB300" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                </svg>
-              </div>
               <p className="font-bold text-white" style={{ fontSize: 16 }}>
                 {count} {count === 1 ? 'personne a liké' : 'personnes ont liké'} ton profil
               </p>
               <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                Passe Premium pour voir qui t'a aimé et matcher instantanément.
+                Va dans Découverte pour matcher avec eux !
               </p>
-              <button
-                className="w-full py-3 font-bold text-sm"
-                style={{ borderRadius: 16, background: 'linear-gradient(135deg, #FFB300, #FF7A00)', color: '#0D0D0D', letterSpacing: 0.3 }}
-              >
-                Passer Premium — 9,99€ / mois
-              </button>
             </div>
 
             {/* Blurred photo grid */}

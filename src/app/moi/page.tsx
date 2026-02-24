@@ -159,27 +159,6 @@ export default function MoiPage() {
           </div>
         )}
 
-        {/* Premium banner */}
-        <div
-          className="w-full relative overflow-hidden"
-          style={{ borderRadius: 20, background: 'rgba(255,179,0,0.06)', border: '1px solid rgba(255,179,0,0.15)', padding: '20px' }}
-        >
-          <div className="relative z-10">
-            <h3 className="font-headline font-bold italic mb-2" style={{ fontSize: 18, color: '#FFB300' }}>
-              Passez au mode Mûr Premium
-            </h3>
-            <p className="leading-relaxed mb-4 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
-              Voyez qui vous a liké et profitez des likes illimités.
-            </p>
-            <button
-              className="w-full py-3 font-bold uppercase tracking-widest text-white text-sm"
-              style={{ borderRadius: 16, background: 'linear-gradient(135deg, #FFB300, #FF7A00)' }}
-            >
-              Devenir Premium ✨
-            </button>
-          </div>
-          <MangoIcon className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 rotate-12" />
-        </div>
       </main>
 
       <BottomNav />
