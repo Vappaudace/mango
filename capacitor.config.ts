@@ -10,7 +10,7 @@ const config: CapacitorConfig = {
   webDir: 'out',
   server: isLocal
     ? { url: 'http://localhost:3000', cleartext: true }
-    : { url: 'https://studio-3482489049-5e5d0.web.app', androidScheme: 'https' },
+    : { url: 'https://studio--studio-3482489049-5e5d0.us-central1.hosted.app', androidScheme: 'https' },
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
