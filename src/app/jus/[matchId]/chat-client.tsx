@@ -1,9 +1,9 @@
 "use client";
 
 import { useParams, useRouter } from 'next/navigation';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRequireAuth } from '@/hooks/use-require-auth';
-import { listenToMessages, sendMessage, markMessagesRead, blockUser, reportUser } from '@/lib/firestore';
+import { listenToMessages, sendMessage, sendAudioMessage, markMessagesRead, blockUser, reportUser } from '@/lib/firestore';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Message, Match } from '@/lib/types';
@@ -11,6 +11,79 @@ import { cn } from '@/lib/utils';
 import { MangoIcon } from '@/components/mango-icons';
 import { generateIcebreakers } from '@/ai/flows/ai-jus-icebreaker';
 
+// ── Audio bubble ─────────────────────────────────────────────────────────
+function AudioBubble({ url, duration, isMine }: { url: string; duration: number; isMine: boolean }) {
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const toggle = () => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio(url);
+      audioRef.current.ontimeupdate = () => {
+        const a = audioRef.current!;
+        setProgress(a.currentTime / (a.duration || 1));
+        setElapsed(Math.floor(a.currentTime));
+      };
+      audioRef.current.onended = () => { setPlaying(false); setProgress(0); setElapsed(0); };
+    }
+    if (playing) {
+      audioRef.current.pause();
+      setPlaying(false);
+    } else {
+      audioRef.current.play();
+      setPlaying(true);
+    }
+  };
+
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const bars = [6,10,14,10,18,8,14,10,6,18,10,14,8,16,10,6,14,10,18,8,12,8];
+
+  return (
+    <div className="flex items-center gap-2.5" style={{ minWidth: 160 }}>
+      <button
+        onClick={toggle}
+        className="flex items-center justify-center shrink-0"
+        style={{
+          width: 36, height: 36, borderRadius: '50%',
+          background: isMine ? 'rgba(255,255,255,0.25)' : 'rgba(255,179,0,0.15)',
+          border: isMine ? '1px solid rgba(255,255,255,0.3)' : '1px solid rgba(255,179,0,0.3)',
+        }}
+      >
+        {playing
+          ? <svg width="14" height="14" viewBox="0 0 24 24" fill={isMine ? 'white' : '#FFB300'}><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          : <svg width="14" height="14" viewBox="0 0 24 24" fill={isMine ? 'white' : '#FFB300'}><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        }
+      </button>
+
+      {/* Waveform bars */}
+      <div className="flex items-center gap-[2px] flex-1" style={{ height: 28 }}>
+        {bars.map((h, i) => {
+          const filled = (i / bars.length) <= progress;
+          return (
+            <div
+              key={i}
+              style={{
+                width: 3, borderRadius: 2, height: h,
+                background: filled
+                  ? (isMine ? 'rgba(255,255,255,0.9)' : '#FFB300')
+                  : (isMine ? 'rgba(255,255,255,0.3)' : 'rgba(255,179,0,0.3)'),
+                transition: 'background 0.1s',
+              }}
+            />
+          );
+        })}
+      </div>
+
+      <span style={{ fontSize: 11, color: isMine ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.5)', minWidth: 32, textAlign: 'right' }}>
+        {playing ? fmt(elapsed) : fmt(duration)}
+      </span>
+    </div>
+  );
+}
+
+// ── Main chat page ────────────────────────────────────────────────────────
 export default function ChatPage() {
   const params = useParams();
   const router = useRouter();
@@ -25,6 +98,13 @@ export default function ChatPage() {
   const [showIcebreakers, setShowIcebreakers] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Voice recording state
+  const [recording, setRecording] = useState(false);
+  const [recordSecs, setRecordSecs] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load match info
   useEffect(() => {
@@ -60,10 +140,7 @@ export default function ChatPage() {
       return;
     }
     try {
-      const result = await generateIcebreakers({
-        bio: '',
-        interests: [],
-      });
+      const result = await generateIcebreakers({ bio: '', interests: [] });
       setIcebreakers(result);
       setShowIcebreakers(true);
     } catch { /* ignore */ }
@@ -99,6 +176,59 @@ export default function ChatPage() {
       setSending(false);
     }
   };
+
+  // ── Voice recording ──────────────────────────────────────────────────
+  const startRecording = useCallback(async () => {
+    if (recording) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+      const mr = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.start(100);
+      mediaRecorderRef.current = mr;
+      setRecording(true);
+      setRecordSecs(0);
+      recordTimerRef.current = setInterval(() => setRecordSecs(s => s + 1), 1000);
+    } catch {
+      // Microphone permission denied
+    }
+  }, [recording]);
+
+  const stopRecording = useCallback(async (cancel = false) => {
+    if (!recording || !mediaRecorderRef.current) return;
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    const duration = recordSecs;
+    setRecording(false);
+    setRecordSecs(0);
+
+    const mr = mediaRecorderRef.current;
+    mediaRecorderRef.current = null;
+
+    if (cancel) {
+      mr.stop();
+      mr.stream.getTracks().forEach(t => t.stop());
+      audioChunksRef.current = [];
+      return;
+    }
+
+    await new Promise<void>(resolve => { mr.onstop = () => resolve(); mr.stop(); });
+    mr.stream.getTracks().forEach(t => t.stop());
+
+    if (audioChunksRef.current.length === 0 || duration < 1 || !user) return;
+    const mimeType = audioChunksRef.current[0].type || 'audio/webm';
+    const blob = new Blob(audioChunksRef.current, { type: mimeType });
+    audioChunksRef.current = [];
+    setSending(true);
+    try {
+      await sendAudioMessage(matchId, user.uid, blob, duration);
+    } finally {
+      setSending(false);
+    }
+  }, [recording, recordSecs, matchId, user]);
+
+  const fmtSecs = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
   if (authLoading) {
     return (
@@ -219,39 +349,46 @@ export default function ChatPage() {
           </p>
         )}
 
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={cn(
-              'flex items-end gap-2 max-w-[85%]',
-              msg.senderId === user?.uid ? 'self-end flex-row-reverse' : 'self-start'
-            )}
-          >
-            {msg.senderId !== user?.uid && (
-              <div
-                className="shrink-0 flex items-center justify-center text-sm overflow-hidden"
-                style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', fontSize: 14 }}
-              >
-                {otherProfile?.photoURL
-                  ? <img src={otherProfile.photoURL} alt="" className="w-full h-full object-cover" />
-                  : '🌟'}
-              </div>
-            )}
+        {messages.map((msg) => {
+          const isMine = msg.senderId === user?.uid;
+          return (
             <div
-              className="px-3.5 py-2.5"
-              style={{
-                borderRadius: 20,
-                ...(msg.senderId === user?.uid
-                  ? { background: 'linear-gradient(135deg, #FFB300, #FF7A00)', borderBottomRightRadius: 6, boxShadow: '0 4px 16px rgba(255,120,0,0.3)' }
-                  : { background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.08)', borderBottomLeftRadius: 6 }),
-              }}
+              key={msg.id}
+              className={cn(
+                'flex items-end gap-2 max-w-[85%]',
+                isMine ? 'self-end flex-row-reverse' : 'self-start'
+              )}
             >
-              <p style={{ fontSize: 14, color: msg.senderId === user?.uid ? 'white' : 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}>
-                {msg.text}
-              </p>
+              {!isMine && (
+                <div
+                  className="shrink-0 flex items-center justify-center overflow-hidden"
+                  style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', fontSize: 14 }}
+                >
+                  {otherProfile?.photoURL
+                    ? <img src={otherProfile.photoURL} alt="" className="w-full h-full object-cover" />
+                    : '🌟'}
+                </div>
+              )}
+              <div
+                className="px-3.5 py-2.5"
+                style={{
+                  borderRadius: 20,
+                  ...(isMine
+                    ? { background: 'linear-gradient(135deg, #FFB300, #FF7A00)', borderBottomRightRadius: 6, boxShadow: '0 4px 16px rgba(255,120,0,0.3)' }
+                    : { background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.08)', borderBottomLeftRadius: 6 }),
+                }}
+              >
+                {msg.type === 'audio' && msg.audioURL ? (
+                  <AudioBubble url={msg.audioURL} duration={msg.audioDuration ?? 0} isMine={isMine} />
+                ) : (
+                  <p style={{ fontSize: 14, color: isMine ? 'white' : 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}>
+                    {msg.text}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         <div ref={bottomRef} />
       </main>
@@ -261,35 +398,75 @@ export default function ChatPage() {
         className="flex items-center gap-2 shrink-0"
         style={{ padding: '10px 12px 30px', borderTop: '1px solid rgba(255,255,255,0.06)', background: '#0D0D0D' }}
       >
-        <button style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'transparent', fontSize: 18, opacity: 0.5 }}>
-          😊
-        </button>
+        {recording ? (
+          /* ── Recording mode ── */
+          <>
+            <button
+              onPointerUp={() => stopRecording(true)}
+              style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'rgba(255,68,68,0.15)', fontSize: 16, cursor: 'pointer' }}
+            >
+              🗑️
+            </button>
 
-        <input
-          type="text"
-          placeholder="Écris ton Jus…"
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSend()}
-          className="flex-1 outline-none"
-          style={{ height: 42, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 21, color: 'white', fontFamily: 'DM Sans, sans-serif', fontSize: 14, padding: '0 16px' }}
-        />
+            <div
+              className="flex-1 flex items-center gap-2 justify-center"
+              style={{ height: 42, background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.2)', borderRadius: 21 }}
+            >
+              <span className="animate-pulse" style={{ width: 8, height: 8, borderRadius: '50%', background: '#FF4444', display: 'inline-block' }} />
+              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
+                🎤 {fmtSecs(recordSecs)}
+              </span>
+            </div>
 
-        <button
-          onClick={handleSend}
-          disabled={!text.trim() || sending}
-          className="flex items-center justify-center transition-all"
-          style={{
-            width: 40, height: 40, borderRadius: '50%',
-            background: text.trim() ? 'linear-gradient(135deg, #FFB300, #FF7A00)' : 'rgba(255,255,255,0.05)',
-            border: 'none',
-            transform: text.trim() ? 'scale(1)' : 'scale(0.9)',
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={text.trim() ? 'white' : 'rgba(255,255,255,0.2)'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-          </svg>
-        </button>
+            <button
+              onPointerUp={() => stopRecording(false)}
+              className="flex items-center justify-center"
+              style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, #FFB300, #FF7A00)', border: 'none', cursor: 'pointer' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
+          </>
+        ) : (
+          /* ── Normal mode ── */
+          <>
+            <button style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'transparent', fontSize: 18, opacity: 0.5 }}>
+              😊
+            </button>
+
+            <input
+              type="text"
+              placeholder="Écris ton Jus…"
+              value={text}
+              onChange={e => setText(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSend()}
+              className="flex-1 outline-none"
+              style={{ height: 42, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 21, color: 'white', fontFamily: 'DM Sans, sans-serif', fontSize: 14, padding: '0 16px' }}
+            />
+
+            {text.trim() ? (
+              <button
+                onClick={handleSend}
+                disabled={sending}
+                className="flex items-center justify-center transition-all"
+                style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, #FFB300, #FF7A00)', border: 'none' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              </button>
+            ) : (
+              <button
+                onPointerDown={startRecording}
+                className="flex items-center justify-center transition-all active:scale-90"
+                style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,179,0,0.12)', border: '1px solid rgba(255,179,0,0.25)', fontSize: 18 }}
+              >
+                🎤
+              </button>
+            )}
+          </>
+        )}
       </footer>
     </div>
   );

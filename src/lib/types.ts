@@ -37,6 +37,9 @@ export interface Message {
   id: string;
   senderId: string;
   text: string;
+  type?: 'text' | 'audio';
+  audioURL?: string;
+  audioDuration?: number; // seconds
   createdAt: Timestamp;
   read: boolean;
 }

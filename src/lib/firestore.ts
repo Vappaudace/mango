@@ -15,7 +15,8 @@ import {
   Unsubscribe,
   writeBatch,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from './firebase';
 import type { UserProfile, Match, Message, InboundLike } from './types';
 
 // ─── GEO HELPERS ──────────────────────────────────────────────────────────
@@ -208,6 +209,34 @@ export async function sendMessage(
   });
   await updateDoc(doc(db, 'matches', matchId), {
     lastMessage: text,
+    lastMessageAt: serverTimestamp(),
+    lastMessageSenderId: senderId,
+  });
+}
+
+/** Upload a voice note blob and send it as an audio message */
+export async function sendAudioMessage(
+  matchId: string,
+  senderId: string,
+  audioBlob: Blob,
+  duration: number
+): Promise<void> {
+  const filename = `audio/${matchId}/${senderId}_${Date.now()}.webm`;
+  const storageRef = ref(storage, filename);
+  await uploadBytes(storageRef, audioBlob, { contentType: 'audio/webm' });
+  const audioURL = await getDownloadURL(storageRef);
+
+  await addDoc(collection(db, 'messages', matchId, 'msgs'), {
+    senderId,
+    text: '🎤 Vocal',
+    type: 'audio',
+    audioURL,
+    audioDuration: Math.round(duration),
+    createdAt: serverTimestamp(),
+    read: false,
+  });
+  await updateDoc(doc(db, 'matches', matchId), {
+    lastMessage: '🎤 Vocal',
     lastMessageAt: serverTimestamp(),
     lastMessageSenderId: senderId,
   });
